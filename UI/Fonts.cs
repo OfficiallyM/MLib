@@ -15,7 +15,7 @@ namespace MLib.UI
 		/// <summary>Raised whenever a font changes so cached text styles can be rebuilt.</summary>
 		public static event Action Changed;
 
-		private static readonly string[] FallbackNames =
+		private static readonly string[] _fallbackNames =
 		{
 			"Segoe UI", "Inter", "Roboto", "Noto Sans", "DejaVu Sans",
 			"Liberation Sans", "Helvetica Neue", "Arial",
@@ -30,7 +30,7 @@ namespace MLib.UI
 			get
 			{
 				if (_body == null)
-					_body = FromOs(FallbackNames);
+					_body = FromOs(_fallbackNames);
 				return _body;
 			}
 		}
@@ -72,7 +72,7 @@ namespace MLib.UI
 				StringComparer.OrdinalIgnoreCase);
 
 			string[] picks = (preferred ?? new string[0])
-				.Concat(FallbackNames)
+				.Concat(_fallbackNames)
 				.Where(installed.Contains)
 				.Distinct(StringComparer.OrdinalIgnoreCase)
 				.ToArray();

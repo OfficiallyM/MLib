@@ -19,11 +19,52 @@ namespace MLib.UI
 		private bool _toggleB;
 		private float _slider = 0.5f;
 		private float _stepped = 40f;
+		private float _volume = 70f;
+		private float _brightness = 30f;
+		private float _gap = 0.5f;
+		private float _gap2 = 0.75f;
 		private float _number = 12.5f;
 		private int _integer = 3;
 		private string _text = string.Empty;
+		private string _notes = string.Empty;
+		private int _dropdown = 1;
+		private readonly bool[] _multi = { true, true, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false };
 		private string _lastClick = "Nothing clicked yet";
+		private static readonly string[] _dropdownOptions =
+		{
+			"Small vehicles",
+			"Large vehicles",
+			"Chassis",
+			"Trailers",
+			"Tanks",
+			"Lights",
+			"Engines",
+			"Radiators",
+			"Wheels",
+			"Tires",
+			"Dials",
+			"Attachables",
+			"Other vehicle parts",
+			"Guns",
+			"Melee weapons",
+			"Cleaning",
+			"Refillables",
+			"Food",
+			"Wearables",
+			"Usables",
+			"Mod items",
+			"Other",
+		};
+
+		private const string ReadOnlyText = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+
+		private readonly AccordionState _displayBlock = new AccordionState(true);
+		private readonly AccordionState _audioBlock = new AccordionState();
+		private readonly AccordionState _advancedBlock = new AccordionState();
+		private readonly AccordionState _nestedBlock = new AccordionState();
+
 		private readonly ScrollState _scroll = new ScrollState();
+		private readonly ScrollState _accordionScroll = new ScrollState();
 		private readonly ScrollState _listScroll = new ScrollState();
 
 		private readonly WindowOptions _options;
@@ -68,8 +109,6 @@ namespace MLib.UI
 
 		public void OnGUI()
 		{
-			DrawStaticPanel();
-
 			// Once the slide-out has finished there is nothing left to draw.
 			if (!_open && Animator.IsHidden(AnimationKey)) return;
 
@@ -77,28 +116,15 @@ namespace MLib.UI
 			{
 				if (ui.Hidden) return;
 
-				_tab = ui.Tabs(_tab, new[] { "Widgets", "List" });
+				_tab = ui.Tabs(_tab, new[] { "Widgets", "Accordion", "List" });
 				ui.Space(4f);
 
 				if (_tab == 0)
 					DrawWidgets(ui);
+				else if (_tab == 1)
+					DrawAccordions(ui);
 				else
 					DrawList(ui);
-			}
-		}
-
-		/// <summary>A fixed, header-less panel in the top right that reopens the demo window.</summary>
-		private void DrawStaticPanel()
-		{
-			Vector2 screen = Ui.ScreenSize;
-			Rect rect = new Rect(screen.x - 270f, 20f, 250f, 120f);
-
-			using (Ui ui = Ui.StaticWindow(rect, "mlib-static"))
-			{
-				ui.Label("Static window", bold: true);
-				ui.Hint("No header, never moves.");
-				if (ui.Button(_open ? "Hide demo window" : "Show demo window", ButtonStyle.Secondary))
-					Open = !_open;
 			}
 		}
 
@@ -110,7 +136,7 @@ namespace MLib.UI
 				using (Ui cols = box.Columns(34f, 1f, 1f, 1f, 1f))
 				{
 					if (cols.Button("Primary")) _lastClick = "Primary";
-					if (cols.Button("Secondary", ButtonStyle.Secondary)) _lastClick = "Secondary";
+					if (cols.Button("Secondary", ButtonStyle.Secondary, icon: "gear", iconSide: IconSide.Right)) _lastClick = "Secondary";
 					if (cols.Button("Ghost", ButtonStyle.Ghost)) _lastClick = "Ghost";
 					if (cols.Button("Delete", ButtonStyle.Danger, icon: "close")) _lastClick = "Danger";
 				}
@@ -122,7 +148,11 @@ namespace MLib.UI
 				_toggleB = box.Toggle("Pill toggle, off", _toggleB);
 				box.Toggle("Disabled toggle", true, enabled: false);
 				_slider = box.Slider(_slider, 0f, 1f, "0.00");
-				_stepped = box.Slider(_stepped, 0f, 100f, "0", step: 5f);
+				_stepped = box.Slider(_stepped, 0f, 100f, "0", step: 5f, label: "Stepped, label above");
+				_volume = box.Slider(_volume, 0f, 100f, "0", label: "Volume", labelPosition: LabelPosition.Left, labelWidth: 100f);
+				_brightness = box.Slider(_brightness, 0f, 100f, "0", label: "Brightness", labelPosition: LabelPosition.Left, labelWidth: 100f);
+				_gap = box.Slider(_gap, 0f, 1f, "0.00", label: "Wide gap before the number", valueOffset: 40f);
+				_gap2 = box.Slider(_gap2, 0f, 1f, "0.00", label: "Small gap before the number", valueOffset: -2f);
 				box.Space(6f);
 
 				box.Header("Fields");
@@ -136,14 +166,28 @@ namespace MLib.UI
 				_text = box.TextField(_text, "Type something...");
 				box.Space(6f);
 
+				box.Header("Text areas");
+				_notes = box.TextArea(_notes, rows: 4, placeholder: "Editable, four rows tall. Scrolls once the text is longer.");
+				box.TextArea(ReadOnlyText, rows: 3, readOnly: true);
+				box.Space(6f);
+
+				box.Header("Dropdowns");
+				using (Ui cols = box.Columns(34f, 1f, 1f))
+				{
+					_dropdown = cols.Dropdown(_dropdown, _dropdownOptions, "Pick one...", maxVisible: 5);
+					cols.MultiDropdown(_multi, _dropdownOptions, "Pick several...", maxVisible: 5);
+				}
+				box.Hint("The lists open over the widgets below them and flip upwards when there is no room.");
+				box.Space(6f);
+
 				box.Header("Badges and icons");
 				using (Ui row = box.Row(26f))
 				{
 					row.Badge("Default");
-					row.Badge("Good", Theme.Current.Good.Base);
-					row.Badge("Warning", Theme.Current.Warning.Base);
-					row.Badge("Info", Palette.SkyBlue);
-					row.Badge("Teal", Palette.Teal);
+					row.Badge("Good", Theme.Current.Good.Base, icon: "check");
+					row.Badge("Warning", Theme.Current.Warning.Base, icon: "star");
+					row.Badge("Right icon", Theme.Current.Info.Base, icon: "gear", iconSide: IconSide.Right);
+					row.Badge(string.Empty, Palette.Teal, icon: "search");
 				}
 				using (Ui row = box.Row())
 				{
@@ -153,6 +197,49 @@ namespace MLib.UI
 				box.Divider();
 				box.Hint("Hints are small, muted and wrap onto several lines when the window is narrow, " +
 					"which is useful for explaining a setting without crowding the control itself.");
+			}
+		}
+
+		private void DrawAccordions(Ui ui)
+		{
+			using (Ui box = ui.Scroll(_accordionScroll))
+			{
+				box.Hint("Each block opens and closes on its own, so several can be open at once.");
+
+				using (Ui body = box.Accordion(_displayBlock, "Display", icon: "gear"))
+				{
+					if (!body.Hidden)
+					{
+						_toggleA = body.Toggle("Fullscreen", _toggleA);
+						_slider = body.Slider(_slider, 0f, 1f, "0.00", label: "Field of view");
+					}
+				}
+
+				using (Ui body = box.Accordion(_audioBlock, "Audio", icon: "star"))
+				{
+					if (!body.Hidden)
+					{
+						_volume = body.Slider(_volume, 0f, 100f, "0", label: "Master volume");
+						_dropdown = body.Dropdown(_dropdown, _dropdownOptions, "Pick one...", maxVisible: 4);
+					}
+				}
+
+				using (Ui body = box.Accordion(_advancedBlock, "Advanced"))
+				{
+					if (!body.Hidden)
+					{
+						body.Hint("Blocks can hold anything, including other blocks.");
+
+						using (Ui inner = body.Accordion(_nestedBlock, "Nested block"))
+						{
+							if (!inner.Hidden)
+							{
+								inner.Badge("Inside", Theme.Current.Good.Base, icon: "check");
+								_toggleB = inner.Toggle("A toggle in a nested block", _toggleB);
+							}
+						}
+					}
+				}
 			}
 		}
 

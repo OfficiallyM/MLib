@@ -16,11 +16,48 @@ namespace MLib.UI
 		Danger,
 	}
 
+	internal enum IconSide
+	{
+		Left,
+		Right,
+	}
+
+	internal enum LabelPosition
+	{
+		/// <summary>On its own line above the control.</summary>
+		Above,
+		/// <summary>On the same line, before the control.</summary>
+		Left,
+	}
+
 	internal sealed partial class Ui
 	{
 		private const float IconSize = 16f;
+		private const float BadgeIconSize = 12f;
+
+		/// <summary>Default gap between a slider and its number.</summary>
+		public const float SliderValueOffset = 12f;
+
+		private const float SliderValueWidth = 56f;
+		private const float SliderLabelHeight = 20f;
+		private const float SliderLabelGap = 12f;
 
 		private static float LineHeight(int size) => Mathf.Ceil(size * 1.6f);
+
+		private static readonly Dictionary<string, string> _numberBuffers = new Dictionary<string, string>();
+		private static GUIStyle _field;
+
+		private sealed class AreaState
+		{
+			public readonly ScrollState Scroll = new ScrollState();
+			public int Cursor = -1;
+		}
+
+		private static readonly Dictionary<string, AreaState> _areaStates = new Dictionary<string, AreaState>();
+		private static GUIStyle _area;
+
+		private const float AreaPaddingX = 10f;
+		private const float AreaPaddingY = 8f;
 
 		private void LabelCore(string text, Color color, int size, bool bold, bool heading, bool wrap, TextAnchor anchor, float width)
 		{
@@ -55,24 +92,48 @@ namespace MLib.UI
 			LabelCore(text, Theme.Current.TextMuted, 12, false, false, true, TextAnchor.MiddleLeft, width);
 		}
 
-		/// <summary>A small rounded tag, tinted with the given colour.</summary>
-		public void Badge(string text, Color? color = null, float width = Default)
+		/// <summary>
+		/// A small rounded tag, tinted with the given colour. Pass an <paramref name="icon"/> to show a
+		/// texture beside the text, or leave the text empty for an icon-only badge. Registered icons
+		/// work with <c>Icons.Get("check")</c>.
+		/// </summary>
+		public void Badge(string text, Color? color = null, float width = Default, string icon = null,
+			IconSide iconSide = IconSide.Left)
 		{
 			Theme t = Theme.Current;
 			Color c = color ?? t.Accent.Text;
 			string s = text ?? string.Empty;
 
-			float w = ResolveWidth(width, Draw.TextWidth(s, 12, true) + 18f, false);
+			bool hasIcon = icon != null;
+			bool hasText = s.Length > 0;
+			float iconW = hasIcon ? BadgeIconSize : 0f;
+			float gap = hasIcon && hasText ? 5f : 0f;
+
+			float w = ResolveWidth(width, (hasText ? Draw.TextWidth(s, 12, true) : 0f) + iconW + gap + 18f, false);
 			Rect cell = PlaceResolved(w, 22f);
 			Rect r = _mode == Mode.Vertical ? cell : new Rect(cell.x, cell.center.y - 11f, cell.width, 22f);
 
 			Draw.Box(r, Theme.Tint(t.Window, c, 0.18f), 11f, Theme.Tint(t.Window, c, 0.45f));
-			Draw.Label(r, s, Shade.Lighten(c, 0.2f), 12, TextAnchor.MiddleCenter, true);
+
+			Color content = Shade.Lighten(c, 0.2f);
+			string shown = hasText ? Draw.Ellipsize(s, Mathf.Max(0f, r.width - 18f - iconW - gap), 12, true) : s;
+			float textW = hasText ? Draw.TextWidth(shown, 12, true) : 0f;
+
+			// Centre the icon and text as one group.
+			float x = r.center.x - (iconW + gap + textW) * 0.5f;
+			float iconX = iconSide == IconSide.Left ? x : x + textW + gap;
+			float textX = iconSide == IconSide.Left ? x + iconW + gap : x;
+
+			if (hasIcon)
+				Draw.Icon(new Rect(iconX, r.center.y - BadgeIconSize * 0.5f, BadgeIconSize, BadgeIconSize), icon, content);
+
+			if (hasText)
+				Draw.Label(new Rect(textX, r.y, textW + 2f, r.height), shown, content, 12, TextAnchor.MiddleLeft, true);
 		}
 
 		/// <summary>A button. Returns true on the frame it is clicked.</summary>
 		public bool Button(string text, ButtonStyle style = ButtonStyle.Primary, float width = Default,
-			bool enabled = true, string icon = null)
+			bool enabled = true, string icon = null, IconSide iconSide = IconSide.Left)
 		{
 			string s = text ?? string.Empty;
 			float intrinsic = Draw.TextWidth(s, TextSize, true) + 32f + (icon != null ? IconSize + 8f : 0f);
@@ -80,7 +141,7 @@ namespace MLib.UI
 
 			bool hover, held;
 			bool clicked = Interact(r, enabled, out hover, out held);
-			DrawButton(r, style, hover, held, enabled, s, icon);
+			DrawButton(r, style, hover, held, enabled, s, icon, iconSide);
 			return clicked;
 		}
 
@@ -95,7 +156,7 @@ namespace MLib.UI
 			return clicked;
 		}
 
-		private static void DrawButton(Rect r, ButtonStyle style, bool hover, bool held, bool enabled, string text, string icon)
+		private static void DrawButton(Rect r, ButtonStyle style, bool hover, bool held, bool enabled, string text, string icon, IconSide iconSide = IconSide.Left)
 		{
 			if (Event.current.type != EventType.Repaint) return;
 
@@ -135,7 +196,7 @@ namespace MLib.UI
 					break;
 			}
 
-			DrawButtonContent(face, text, icon, content);
+			DrawButtonContent(face, text, icon, content, iconSide);
 			GUI.color = previous;
 		}
 
@@ -155,7 +216,7 @@ namespace MLib.UI
 			return f;
 		}
 
-		private static void DrawButtonContent(Rect face, string text, string icon, Color color)
+		private static void DrawButtonContent(Rect face, string text, string icon, Color color, IconSide iconSide = IconSide.Left)
 		{
 			bool hasIcon = !string.IsNullOrEmpty(icon);
 			bool hasText = !string.IsNullOrEmpty(text);
@@ -168,14 +229,17 @@ namespace MLib.UI
 			float textW = hasText ? Draw.TextWidth(shown, TextSize, true) : 0f;
 			float x = face.center.x - (iconW + gap + textW) * 0.5f;
 
+			float iconX = iconSide == IconSide.Left ? x : x + textW + gap;
+			float textX = iconSide == IconSide.Left ? x + iconW + gap : x;
+
 			if (hasIcon)
 			{
-				Draw.Icon(new Rect(x, face.center.y - IconSize * 0.5f, IconSize, IconSize), icon, color);
+				Draw.Icon(new Rect(iconX, face.center.y - IconSize * 0.5f, IconSize, IconSize), icon, color);
 				x += iconW + gap;
 			}
 
 			if (hasText)
-				Draw.Label(new Rect(x, face.y, textW + 2f, face.height), shown, color, TextSize, TextAnchor.MiddleLeft, true);
+				Draw.Label(new Rect(textX, face.y, textW + 2f, face.height), shown, color, TextSize, TextAnchor.MiddleLeft, true);
 		}
 
 		/// <summary>A pill toggle with an optional label. Returns the new value.</summary>
@@ -222,15 +286,33 @@ namespace MLib.UI
 		/// A horizontal slider with its value shown on the right. Returns the new value.
 		/// A <paramref name="step"/> above zero snaps the value to multiples of it.
 		/// </summary>
-		public float Slider(float value, float min, float max, string format = "0.##", float step = 0f, float width = Default)
+		/// <param name="label">Optional text describing the slider.</param>
+		/// <param name="labelPosition">Whether the label goes above the slider or on its left.</param>
+		/// <param name="labelWidth">Width of a left label. <see cref="Default"/> fits it to the text; give the same width to several sliders to line them up.</param>
+		/// <param name="valueOffset">Space between the slider and its number.</param>
+		public float Slider(float value, float min, float max, string format = "0.##", float step = 0f, float width = Default,
+			string label = null, LabelPosition labelPosition = LabelPosition.Above, float labelWidth = Default,
+			float valueOffset = SliderValueOffset)
 		{
-			const float valueWidth = 56f;
+			bool hasLabel = !string.IsNullOrEmpty(label);
+			bool above = hasLabel && labelPosition == LabelPosition.Above;
+			bool left = hasLabel && labelPosition == LabelPosition.Left;
 
-			Rect r = Place(width, -1f, true, ControlHeight);
+			float labelH = above ? SliderLabelHeight : 0f;
+			float leftW = left ? (labelWidth == Default ? Draw.TextWidth(label, TextSize) + 2f : labelWidth) : 0f;
+
+			Rect full = Place(width, -1f, true, ControlHeight + labelH);
+			Rect r = new Rect(full.x, full.y + labelH, full.width, ControlHeight);
+			if (left)
+			{
+				float shift = leftW + SliderLabelGap;
+				r = new Rect(r.x + shift, r.y, Mathf.Max(0f, r.width - shift), r.height);
+			}
+
 			int id = GUIUtility.GetControlID(FocusType.Passive);
 			Event e = Event.current;
 
-			Rect track = new Rect(r.x, r.center.y - 3f, Mathf.Max(1f, r.width - valueWidth - 12f), 6f);
+			Rect track = new Rect(r.x, r.center.y - 3f, Mathf.Max(1f, r.width - SliderValueWidth - valueOffset), 6f);
 			Rect grab = new Rect(track.x - 8f, r.y, track.width + 16f, r.height);
 
 			switch (e.GetTypeForControl(id))
@@ -269,6 +351,13 @@ namespace MLib.UI
 				bool hover = active || (GUIUtility.hotControl == 0 && Hit(grab));
 				float f = Mathf.Approximately(max, min) ? 0f : Mathf.Clamp01((value - min) / (max - min));
 
+				if (above)
+					Draw.Label(new Rect(full.x, full.y, full.width, labelH),
+						Draw.Ellipsize(label, full.width, TextSize - 1), t.TextSoft, TextSize - 1);
+				else if (left)
+					Draw.Label(new Rect(full.x, r.y, leftW, r.height),
+						Draw.Ellipsize(label, leftW, TextSize), t.TextSoft, TextSize);
+
 				Draw.Box(track, t.Track, 3f, t.Border);
 				if (f > 0f)
 					Draw.Box(new Rect(track.x, track.y, Mathf.Max(6f, track.width * f), track.height), t.Accent.Base, 3f);
@@ -278,7 +367,7 @@ namespace MLib.UI
 				Draw.Circle(new Rect(thumb.x, thumb.y + 1.5f, thumb.width, thumb.height), t.Shadow);
 				Draw.Box(thumb, active || hover ? t.Text : t.TextSoft, 8f, active ? t.SelectedBorder : (Color?)null);
 
-				Draw.Label(new Rect(track.xMax + 12f, r.y, valueWidth, r.height),
+				Draw.Label(new Rect(track.xMax + valueOffset, r.y, SliderValueWidth, r.height),
 					value.ToString(format, CultureInfo.InvariantCulture), t.TextSoft, 13, TextAnchor.MiddleRight);
 			}
 
@@ -330,9 +419,6 @@ namespace MLib.UI
 			return selected;
 		}
 
-		private static readonly Dictionary<string, string> _numberBuffers = new Dictionary<string, string>();
-		private static GUIStyle _field;
-
 		/// <summary>
 		/// A single-line text field. <paramref name="id"/> is optional and only needed if you want to
 		/// focus the field yourself with <c>GUI.FocusControl</c>.
@@ -349,6 +435,138 @@ namespace MLib.UI
 
 			if (!focused && string.IsNullOrEmpty(result) && !string.IsNullOrEmpty(placeholder))
 				Draw.Label(new Rect(r.x + 10f, r.y, r.width - 20f, r.height), placeholder, t.TextMuted, TextSize);
+
+			return result;
+		}
+
+		/// <summary>
+		/// A multi-line text field that is <paramref name="rows"/> lines tall and scrolls when the text
+		/// is longer. Typing keeps the caret in view.
+		/// </summary>
+		/// <param name="rows">How many lines of text fit in the field's height.</param>
+		/// <param name="readOnly">Text can be selected and copied but not changed.</param>
+		/// <param name="id">Optional, only needed to focus the field yourself with <c>GUI.FocusControl</c>.</param>
+		public string TextArea(string value, int rows = 4, string placeholder = null, bool readOnly = false,
+			float width = Default, string id = null, int maxLength = 0)
+		{
+			Theme t = Theme.Current;
+			string text = value ?? string.Empty;
+			GUIStyle style = AreaStyle();
+
+			float lineH = Draw.TextHeight("Ag", TextSize, 100000f);
+			float height = Mathf.Max(1, rows + 1) * lineH + AreaPaddingY * 2f;
+			Rect r = Place(width, -1f, true, height);
+
+			string name = id ?? NextFieldName();
+			bool focused = GUI.GetNameOfFocusedControl() == name;
+			int barId = GUIUtility.GetControlID(FocusType.Passive);
+
+			AreaState state;
+			if (!_areaStates.TryGetValue(name, out state))
+			{
+				state = new AreaState();
+				_areaStates[name] = state;
+			}
+
+			// Measure with the scrollbar's width reserved, so whether the bar shows cannot flip back and forth.
+			float narrow = Mathf.Max(1f, r.width - ScrollGutter);
+			float measured = style.CalcHeight(new GUIContent(text.EndsWith("\n") ? text + " " : text), narrow);
+			bool overflow = measured > r.height + 0.5f;
+			float innerW = overflow ? narrow : r.width;
+			float contentH = overflow ? measured : r.height;
+
+			ScrollState scroll = state.Scroll;
+			scroll.ContentHeight = contentH;
+			scroll.Position.y = Mathf.Clamp(scroll.Position.y, 0f, Mathf.Max(0f, contentH - r.height));
+
+			DrawFieldBox(r, focused);
+
+			GUI.BeginGroup(r);
+			Rect field = new Rect(0f, -scroll.Position.y, innerW, contentH);
+			string edited = EditArea(field, text, name, style, maxLength);
+
+			if (focused)
+			{
+				TextEditor editor = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
+
+				// Only follow the caret when it moves, or the wheel could never scroll away from it.
+				if (editor.cursorIndex != state.Cursor)
+				{
+					state.Cursor = editor.cursorIndex;
+
+					Vector2 caret = style.GetCursorPixelPosition(new Rect(0f, 0f, innerW, contentH),
+						new GUIContent(edited), editor.cursorIndex);
+
+					float top = caret.y - AreaPaddingY;
+					float bottom = caret.y + lineH + AreaPaddingY;
+					if (top < scroll.Position.y)
+						scroll.Position.y = Mathf.Max(0f, top);
+					else if (bottom > scroll.Position.y + r.height)
+						scroll.Position.y = bottom - r.height;
+				}
+			}
+			else
+			{
+				state.Cursor = -1;
+			}
+
+			GUI.EndGroup();
+
+			if (!focused && text.Length == 0 && !string.IsNullOrEmpty(placeholder))
+				Draw.Label(new Rect(r.x + AreaPaddingX, r.y + AreaPaddingY, r.width - AreaPaddingX * 2f, lineH),
+					placeholder, t.TextMuted, TextSize, TextAnchor.UpperLeft);
+
+			FinishScroll(scroll, r, barId);
+
+			// Read-only fields still get selection and a caret, but anything typed is thrown away.
+			return readOnly ? text : edited;
+		}
+
+		private static GUIStyle AreaStyle()
+		{
+			Theme t = Theme.Current;
+
+			if (_area == null)
+				_area = new GUIStyle { clipping = TextClipping.Clip, wordWrap = true, richText = false };
+
+			_area.font = Fonts.Body;
+			_area.fontSize = TextSize;
+			_area.alignment = TextAnchor.UpperLeft;
+			_area.padding.left = (int)AreaPaddingX;
+			_area.padding.right = (int)AreaPaddingX;
+			_area.padding.top = (int)AreaPaddingY;
+			_area.padding.bottom = (int)AreaPaddingY;
+			_area.normal.textColor = t.Text;
+			_area.hover.textColor = t.Text;
+			_area.active.textColor = t.Text;
+			_area.focused.textColor = t.Text;
+			return _area;
+		}
+
+		/// <summary>Same theming as <see cref="EditText"/>, for a multi-line field.</summary>
+		private static string EditArea(Rect r, string value, string name, GUIStyle style, int maxLength)
+		{
+			Theme t = Theme.Current;
+
+			GUISettings settings = GUI.skin.settings;
+			Color caret = settings.cursorColor;
+			Color selection = settings.selectionColor;
+			settings.cursorColor = t.Text;
+			settings.selectionColor = Theme.WithAlpha(t.Accent.Text, 0.35f);
+
+			string result;
+			try
+			{
+				GUI.SetNextControlName(name);
+				result = maxLength > 0
+					? GUI.TextArea(r, value, maxLength, style)
+					: GUI.TextArea(r, value, style);
+			}
+			finally
+			{
+				settings.cursorColor = caret;
+				settings.selectionColor = selection;
+			}
 
 			return result;
 		}
@@ -383,8 +601,7 @@ namespace MLib.UI
 			{
 				_numberBuffers[name] = edited;
 
-				float parsed;
-				if (float.TryParse(edited, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
+				if (float.TryParse(edited, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed))
 					value = Mathf.Clamp(parsed, min, max);
 			}
 

@@ -77,7 +77,8 @@ namespace MLib.UI
 		{
 			int px = def.Px;
 			Texture2D tex = Textures.Create(px, px);
-			float unit = Grid / px;          // Grid units per pixel.
+			// Grid units per pixel.
+			float unit = Grid / px;
 			float half = def.Stroke * 0.5f;
 			Color[] pixels = new Color[px * px];
 

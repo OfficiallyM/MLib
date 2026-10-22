@@ -36,6 +36,12 @@ namespace MLib.UI
 		private readonly Ui _root;
 		private Rect _bounds;
 		private Rect _clip;
+
+		/// <summary>
+		/// Where this scope's coordinate space starts, measured in the root's space. Overlays such as
+		/// dropdown lists are drawn once at the root, so they need to convert widget rects up to it.
+		/// </summary>
+		private Vector2 _origin;
 		private float _cursor;
 		private float[] _cells;
 		private int _cell;
@@ -50,17 +56,8 @@ namespace MLib.UI
 			_clip = clip;
 			_scope = scope;
 			_root = parent != null ? parent._root : this;
+			_origin = parent != null ? parent._origin : Vector2.zero;
 		}
-
-		/// <summary>The area this scope lays widgets out in.</summary>
-		public Rect Bounds => _bounds;
-
-		/// <summary>
-		/// Remaining space: height in a vertical scope, width in a row.
-		/// </summary>
-		public float Remaining => _mode == Mode.Vertical
-			? Mathf.Max(0f, _bounds.height - _cursor)
-			: AvailableWidth;
 
 		/// <summary>Height consumed so far by a vertical scope (without the trailing gap).</summary>
 		public float UsedHeight => _cursor > 0f ? _cursor - Spacing : 0f;
@@ -68,23 +65,6 @@ namespace MLib.UI
 		private float AvailableWidth => _mode == Mode.Vertical
 			? _bounds.width
 			: Mathf.Max(0f, _bounds.width - _cursor);
-
-		/// <summary>
-		/// Lay widgets out inside an existing rect, for hosting in a tab or panel you already have.
-		/// With <paramref name="clip"/> the content is clipped to the rect.
-		/// </summary>
-		/// <param name="scope">Prefix for text field control names. Use a distinct one per area.</param>
-		public static Ui Area(Rect area, string scope = "ui", bool clip = false)
-		{
-			if (!clip)
-				return new Ui(Mode.Vertical, area, _everywhere, scope, null);
-
-			GUI.BeginGroup(area);
-			Rect local = new Rect(0f, 0f, area.width, area.height);
-			Ui ui = new Ui(Mode.Vertical, local, local, scope, null);
-			ui._onDispose = GUI.EndGroup;
-			return ui;
-		}
 
 		/// <summary>A horizontal row. Widgets inside are placed left to right.</summary>
 		public Ui Row(float height = Default)
@@ -206,8 +186,19 @@ namespace MLib.UI
 			return new Rect(x, y, Mathf.Max(0f, xMax - x), Mathf.Max(0f, yMax - y));
 		}
 
-		/// <summary>True if the mouse is over the rect and inside this scope's visible area.</summary>
+		/// <summary>
+		/// True if the mouse is over the rect and inside this scope's visible area. Always false
+		/// while a dropdown list is open, so a click that is meant to close the list cannot also
+		/// press whatever is underneath it.
+		/// </summary>
 		private bool Hit(Rect r)
+		{
+			if (DropdownOpen) return false;
+			return HitRaw(r);
+		}
+
+		/// <summary>Same as <see cref="Hit"/> but ignores any open dropdown.</summary>
+		private bool HitRaw(Rect r)
 		{
 			Vector2 m = Event.current.mousePosition;
 			return _clip.Contains(m) && r.Contains(m);

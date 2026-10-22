@@ -255,7 +255,7 @@ namespace MLib.UI
 			{
 				if (o.Background)
 				{
-					Draw.Glow(drawn, new Color(0f, 0f, 0f, 0.30f), 14f, 3, 4f);
+					Draw.Glow(drawn, new Color(0f, 0f, 0f, 0.30f), 14f, 2, 2f);
 					Draw.Box(drawn, t.Window, 12f, t.WindowBorder);
 				}
 
@@ -296,6 +296,7 @@ namespace MLib.UI
 			Rect local = new Rect(0f, 0f, content.width, content.height);
 			ui._bounds = local;
 			ui._clip = local;
+			ui._origin = content.position;
 			ui.CloseRequested = closeClicked;
 			ui.MouseOver = !hidden && drawn.Contains(e.mousePosition);
 			ui.Hidden = hidden;
@@ -305,6 +306,9 @@ namespace MLib.UI
 			ui._onDispose = () =>
 			{
 				GUI.EndGroup();
+
+				// Overlays go on top of everything in the window, still inside the scaled matrix.
+				FlushDropdown();
 
 				// Stop clicks and scrolling that nothing claimed from reaching other IMGUI below.
 				Event current = Event.current;

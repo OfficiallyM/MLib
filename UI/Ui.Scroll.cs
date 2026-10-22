@@ -43,6 +43,7 @@ namespace MLib.UI
 				Mathf.Max(view.height, state.ContentHeight));
 
 			Ui child = new Ui(Mode.Vertical, content, Intersect(parentClipInLocal, local), _scope, this);
+			child._origin = _origin + view.position;
 			child._onDispose = () =>
 			{
 				state.ContentHeight = child.UsedHeight;
