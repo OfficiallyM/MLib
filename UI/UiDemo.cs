@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 namespace MLib.UI
@@ -81,6 +81,7 @@ namespace MLib.UI
 				AnimationKey = AnimationKey,
 				SlideDirection = Animator.SlideDirection.Left,
 				OnClose = HandleClose,
+				FooterText = "Made with ❤️ by M-",
 			};
 
 			// Start in whichever state _open says, without sliding.
@@ -152,7 +153,7 @@ namespace MLib.UI
 				_volume = box.Slider(_volume, 0f, 100f, "0", label: "Volume", labelPosition: LabelPosition.Left, labelWidth: 100f);
 				_brightness = box.Slider(_brightness, 0f, 100f, "0", label: "Brightness", labelPosition: LabelPosition.Left, labelWidth: 100f);
 				_gap = box.Slider(_gap, 0f, 1f, "0.00", label: "Wide gap before the number", valueOffset: 40f);
-				_gap2 = box.Slider(_gap2, 0f, 1f, "0.00", label: "Small gap before the number", valueOffset: -2f);
+				_gap2 = box.Slider(_gap2, 0f, 1f, "0.00", label: "Small gap before the number", valueOffset: -20f);
 				box.Space(6f);
 
 				box.Header("Fields");

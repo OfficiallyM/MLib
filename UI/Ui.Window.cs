@@ -42,6 +42,12 @@ namespace MLib.UI
 		/// </summary>
 		public Action OnClose;
 
+		/// <summary>Text shown in the footer bar along the bottom. Leave null for no footer text.</summary>
+		public string FooterText;
+
+		/// <summary>Where the footer text sits.</summary>
+		public TextAnchor FooterAnchor = TextAnchor.MiddleRight;
+
 		/// <summary>No header, dragging or resizing. Use for HUD panels and fixed menus.</summary>
 		public static WindowOptions Static()
 		{
@@ -52,6 +58,7 @@ namespace MLib.UI
 	internal sealed partial class Ui
 	{
 		private const float HeaderHeight = 48f;
+		private const float FooterHeight = 30f;
 
 		private static Vector2 _grab;
 		private static readonly WindowOptions _defaultWindow = new WindowOptions();
@@ -132,6 +139,7 @@ namespace MLib.UI
 			Vector2 min = o.MinSize;
 
 			bool header = o.Header;
+			bool footer = !string.IsNullOrEmpty(o.FooterText);
 			bool closable = header && o.Closable;
 			bool movable = header && o.Movable && !fixedRect;
 			bool resizable = o.Resizable && !fixedRect;
@@ -268,6 +276,17 @@ namespace MLib.UI
 						title ?? string.Empty, t.Text, 17, TextAnchor.MiddleLeft, true, true);
 				}
 
+				if (footer)
+				{
+					Rect bar = new Rect(drawn.x + 1f, drawn.yMax - FooterHeight, drawn.width - 2f, FooterHeight - 1f);
+					Draw.Box(bar, t.Bar, new Vector4(0f, 0f, 11f, 11f));
+					Draw.Fill(new Rect(bar.x, bar.y, bar.width, 1f), t.Divider);
+
+					// The right margin leaves room for the resize grip.
+					Draw.Label(new Rect(bar.x + 18f, bar.y, Mathf.Max(0f, bar.width - 60f), bar.height),
+						o.FooterText, t.TextMuted, 12, o.FooterAnchor);
+				}
+
 				if (closable)
 				{
 					Rect closeRect = CloseRectOf(drawn);
@@ -286,11 +305,12 @@ namespace MLib.UI
 
 			// Content area, clipped to the window body.
 			float top = header ? HeaderHeight : 0f;
+			float bottom = footer ? FooterHeight : 0f;
 			Rect content = new Rect(
 				drawn.x + Padding,
 				drawn.y + top + Padding,
 				Mathf.Max(0f, drawn.width - Padding * 2f),
-				Mathf.Max(0f, drawn.height - top - Padding * 2f));
+				Mathf.Max(0f, drawn.height - top - bottom - Padding * 2f));
 
 			GUI.BeginGroup(content);
 			Rect local = new Rect(0f, 0f, content.width, content.height);
